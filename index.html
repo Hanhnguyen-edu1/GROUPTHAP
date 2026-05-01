@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deadlock Recovery Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Đồ án hệ điều hành</p>
+          <h1>Hệ thống tự động khôi phục từ deadlock</h1>
+          <p class="subtitle">
+            Mô phỏng phát hiện deadlock bằng Wait-For Graph và tự động khôi phục bằng cách kết thúc tiến trình hoặc chiếm lại tài nguyên.
+          </p>
+        </div>
+        <div class="status-card">
+          <strong id="globalMetric">RAG</strong>
+          <span>Resource Allocation Graph</span>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Chọn mô đun">
+        <button class="tab active" data-tab="deadlock">Deadlock Recovery</button>
+        <button class="tab" data-tab="scheduler">Lập lịch CPU</button>
+        <button class="tab" data-tab="semaphore">Semaphore</button>
+        <button class="tab" data-tab="address">Dịch địa chỉ</button>
+        <button class="tab" data-tab="paging">Page Replacement</button>
+        <button class="tab" data-tab="task-manager">Task Manager</button>
+      </nav>
+
+      <section id="deadlock" class="module active">
+        <div class="deadlock-layout">
+          <aside class="panel controls">
+            <div class="panel-title">
+              <h2>Cấu hình hệ thống</h2>
+              <button id="resetDeadlockBtn" class="icon-btn" title="Tải lại kịch bản">↻</button>
+            </div>
+
+            <label class="field">
+              <span>Kịch bản mẫu</span>
+              <select id="deadlockScenario"></select>
+            </label>
+
+            <label class="field">
+              <span>Tài nguyên (cách nhau bằng dấu phẩy)</span>
+              <input id="deadlockResourcesInput" value="R1,R2,R3,R4" />
+            </label>
+
+            <label class="field">
+              <span>Tiến trình: PID, burst, priority, cost, holds, waits</span>
+              <textarea id="deadlockProcessInput" class="compact-textarea"></textarea>
+            </label>
+
+            <button id="applyDeadlockInputBtn" class="ghost-btn full-width">Áp dụng dữ liệu nhập</button>
+
+            <div class="segmented">
+              <button class="recovery-strategy active" data-recovery="terminate">Kill process</button>
+              <button class="recovery-strategy" data-recovery="preempt">Preempt resource</button>
+            </div>
+
+            <label class="check-row">
+              <input id="autoVictim" type="checkbox" checked />
+              <span>Tự động chọn nạn nhân theo chi phí thấp, ưu tiên thấp</span>
+            </label>
+
+            <label class="field">
+              <span>Chọn nạn nhân thủ công</span>
+              <select id="victimSelect"></select>
+            </label>
+
+            <div class="button-row">
+              <button id="detectDeadlockBtn" class="primary-btn">Phát hiện</button>
+              <button id="recoverDeadlockBtn" class="danger-btn">Khôi phục</button>
+            </div>
+
+            <button id="autoRecoverBtn" class="ghost-btn full-width">Tự động xử lý đến khi an toàn</button>
+
+            <div class="metric-strip">
+              <div><strong id="deadProcessCount">0</strong><span>Tiến trình</span></div>
+              <div><strong id="deadResourceCount">0</strong><span>Tài nguyên</span></div>
+              <div><strong id="deadStepCount">0</strong><span>Bước</span></div>
+            </div>
+          </aside>
+
+          <section class="panel output">
+            <div class="panel-title">
+              <div>
+                <h2>Resource Allocation Graph</h2>
+                <p class="panel-subtitle">P → R là yêu cầu tài nguyên, R → P là tài nguyên đang được cấp phát.</p>
+              </div>
+              <span id="deadlockState" class="pill neutral">Chưa phân tích</span>
+            </div>
+            <div id="resourceGraph" class="resource-graph"></div>
+          </section>
+        </div>
+
+        <div class="deadlock-bottom">
+          <section class="panel output">
+            <div class="panel-title">
+              <h2>Gantt khôi phục</h2>
+              <span id="cycleText" class="pill">Không có chu trình</span>
+            </div>
+            <div id="recoveryGantt" class="gantt recovery-gantt"></div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>PID</th>
+                    <th>Burst</th>
+                    <th>Ưu tiên</th>
+                    <th>Chi phí hủy</th>
+                    <th>Đang giữ</th>
+                    <th>Đang chờ</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody id="deadlockRows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel output">
+            <h2>Nhật ký thuật toán</h2>
+            <ol id="deadlockLog" class="event-log tall"></ol>
+          </section>
+        </div>
+      </section>
+
+      <section id="scheduler" class="module">
+        <div class="module-grid">
+          <aside class="panel controls">
+            <div class="panel-title">
+              <h2>Danh sách tiến trình</h2>
+              <button id="addProcessBtn" class="icon-btn" title="Thêm tiến trình">+</button>
+            </div>
+            <div id="processInputs" class="stack"></div>
+            <label class="field">
+              <span>Thuật toán</span>
+              <select id="algorithmSelect">
+                <option value="fcfs">FCFS</option>
+                <option value="sjf">SJF không ưu tiên</option>
+                <option value="priority">Priority không ưu tiên</option>
+                <option value="rr">Round Robin</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Quantum Round Robin</span>
+              <input id="quantumInput" type="number" min="1" value="2" />
+            </label>
+            <div class="button-row">
+              <button id="runScheduleBtn" class="primary-btn">Tính lịch</button>
+              <button id="compareScheduleBtn" class="ghost-btn">So sánh</button>
+            </div>
+          </aside>
+
+          <section class="panel output">
+            <div class="panel-title">
+              <h2>Biểu đồ Gantt</h2>
+              <span id="scheduleName" class="pill">FCFS</span>
+            </div>
+            <div id="ganttChart" class="gantt"></div>
+            <div class="metrics">
+              <div><strong id="avgWaiting">0</strong><span>Chờ trung bình</span></div>
+              <div><strong id="avgTurnaround">0</strong><span>Hoàn tất trung bình</span></div>
+              <div><strong id="avgResponse">0</strong><span>Đáp ứng trung bình</span></div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>PID</th>
+                    <th>Đến</th>
+                    <th>Burst</th>
+                    <th>Ưu tiên</th>
+                    <th>Hoàn tất</th>
+                    <th>Chờ</th>
+                    <th>Đáp ứng</th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleRows"></tbody>
+              </table>
+            </div>
+            <div id="comparison" class="comparison"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="semaphore" class="module">
+        <div class="module-grid">
+          <aside class="panel controls">
+            <h2>Điều khiển semaphore</h2>
+            <label class="field">
+              <span>Giá trị ban đầu</span>
+              <input id="semaphoreValue" type="number" min="1" value="1" />
+            </label>
+            <div class="button-row">
+              <button id="semStepBtn" class="primary-btn">Chạy 1 bước</button>
+              <button id="semResetBtn" class="ghost-btn">Đặt lại</button>
+            </div>
+          </aside>
+          <section class="panel output">
+            <div class="panel-title">
+              <h2>Semaphore ngăn xung đột tài nguyên</h2>
+              <span id="semState" class="pill">Sẵn sàng</span>
+            </div>
+            <div id="semProcesses" class="lane-grid"></div>
+            <ol id="semLog" class="event-log"></ol>
+          </section>
+        </div>
+      </section>
+
+      <section id="address" class="module">
+        <div class="module-grid">
+          <aside class="panel controls">
+            <h2>Thông số bộ nhớ</h2>
+            <label class="field"><span>Địa chỉ logic</span><input id="logicalAddress" type="number" min="0" value="2457" /></label>
+            <label class="field"><span>Kích thước trang</span><input id="pageSize" type="number" min="1" value="1024" /></label>
+            <label class="field"><span>Bảng trang (trang:khung)</span><textarea id="pageTableInput">0:5
+1:2
+2:8
+3:1</textarea></label>
+            <button id="translateBtn" class="primary-btn">Dịch địa chỉ</button>
+          </aside>
+          <section class="panel output">
+            <h2>Kết quả chuyển đổi</h2>
+            <div id="addressResult" class="translation"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="paging" class="module">
+        <div class="module-grid">
+          <aside class="panel controls">
+            <h2>Chuỗi tham chiếu</h2>
+            <label class="field"><span>Reference string</span><input id="referenceString" value="7 0 1 2 0 3 0 4 2 3 0 3 2" /></label>
+            <label class="field"><span>Số frame</span><input id="frameCount" type="number" min="1" value="3" /></label>
+            <div class="segmented">
+              <button class="page-algo active" data-page-algo="fifo">FIFO</button>
+              <button class="page-algo" data-page-algo="lru">LRU</button>
+            </div>
+            <button id="runPagingBtn" class="primary-btn">Mô phỏng</button>
+          </aside>
+          <section class="panel output">
+            <div class="panel-title">
+              <h2>Page Replacement</h2>
+              <span id="faultBadge" class="pill">0 lỗi trang</span>
+            </div>
+            <div id="pagingTimeline" class="paging-grid"></div>
+          </section>
+        </div>
+      </section>
+
+      <section id="task-manager" class="module">
+        <section class="panel output">
+          <div class="panel-title">
+            <h2>Task Manager giả lập</h2>
+            <button id="refreshTasksBtn" class="ghost-btn small">Làm mới</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>PID</th>
+                  <th>Tên tiến trình</th>
+                  <th>CPU</th>
+                  <th>RAM</th>
+                  <th>Trạng thái</th>
+                  <th>Thao tác</th>
+                </tr>
+              </thead>
+              <tbody id="taskRows"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
