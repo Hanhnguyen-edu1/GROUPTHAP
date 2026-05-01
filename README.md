@@ -1,4 +1,4 @@
-# Deadlock Recovery Lab
+# GROUPTHAP
 
 Ứng dụng web cho đồ án **Hệ thống tự động khôi phục từ deadlock bằng cách kết thúc tiến trình hoặc chiếm lại tài nguyên**.
 
